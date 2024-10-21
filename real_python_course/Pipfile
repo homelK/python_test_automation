@@ -1,0 +1,14 @@
+[[source]]
+url = "https://pypi.org/simple"
+verify_ssl = true
+name = "pypi"
+
+[packages]
+flask = "*"
+connexion = {extras = ["uvicorn", "swagger-ui", "flask"], version = "*"}
+flask-marshmallow = {extras = ["sqlalchemy"], version = "*"}
+
+[dev-packages]
+
+[requires]
+python_version = "3.12"

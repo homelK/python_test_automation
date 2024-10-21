@@ -1,0 +1,1 @@
+https://realpython.com/flask-connexion-rest-api/#what-rest-is
