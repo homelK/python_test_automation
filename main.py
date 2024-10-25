@@ -7,16 +7,21 @@ from flask_wtf import FlaskForm
 from wtforms import StringField, SubmitField
 from wtforms.validators import DataRequired, URL
 from flask_ckeditor import CKEditor, CKEditorField
-from datetime import date
+import datetime
 
-
+# Flask app initialization and configuration
 app = Flask(__name__)
 app.config['SECRET_KEY'] = '8BYkEfBA6O6donzWlSihBXox7C0sKR6b'
+
 Bootstrap5(app)
+
+app.config['CKEDITOR_PKG_TYPE'] = 'basic'
+ckeditor = CKEditor(app)
 
 # CREATE DATABASE
 class Base(DeclarativeBase):
     pass
+
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///posts.db'
 db = SQLAlchemy(model_class=Base)
 db.init_app(app)
@@ -36,6 +41,16 @@ class BlogPost(db.Model):
 with app.app_context():
     db.create_all()
 
+class BlogForm(FlaskForm):
+    csrf_token = app.config['SECRET_KEY']
+    title = StringField("Blog Post Title", validators=[DataRequired()])
+    subtitle = StringField("Blog Post Subtitle", validators=[DataRequired()])
+    author = StringField("Author", validators=[DataRequired()])
+    url = StringField("URL", validators=[DataRequired(), URL()])
+    body = CKEditorField('Body')
+    submit = SubmitField("Send post")
+
+
 
 @app.route('/', methods=["GET"])
 def get_all_posts():
@@ -49,9 +64,21 @@ def show_post(post_id):
 
 
 # TODO: add_new_post() to create a new blog post
-@app.route('/new-post')
+@app.route('/new-post', methods=['GET', 'POST'])
 def add_new_post():
-    return  render_template("make-post.html")
+    form = BlogForm()
+    if form.validate_on_submit():
+        title = form.title.data
+        subtitle = form.subtitle.data
+        date = datetime.date.today().strftime("%B %d, %Y")
+        body = form.body.data
+        author = form.author.data
+        img_url = form.url.data
+        new_post = BlogPost(title, subtitle, date, body, author, img_url)
+        db.session.add(new_post)
+        db.session.commit()
+        return redirect(url_for("/"))
+    return render_template("make-post.html", form=form)
 
 
 # TODO: edit_post() to change an existing blog post

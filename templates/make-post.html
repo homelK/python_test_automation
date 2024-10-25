@@ -1,3 +1,4 @@
+{% from 'bootstrap5/form.html' import render_form %}
 {% block content %} {% include "header.html" %}
 
 <!-- Page Header -->
@@ -25,8 +26,14 @@
     <div class="row">
       <div class="col-lg-8 col-md-10 mx-auto">
         <!-- TODO:-Add CKEditor and render the form here -->
+        <form method="POST" action="{{ url_for('add_new_post') }}" novalidate>
+                {{ render_form(form) }}
+         </form>
       </div>
     </div>
   </div>
 </main>
+ {{ ckeditor.load() }}
+ {{ ckeditor.config(name='body') }}
 {% include "footer.html" %} {% endblock %}
+
