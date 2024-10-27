@@ -15,6 +15,7 @@ app.config['SECRET_KEY'] = '8BYkEfBA6O6donzWlSihBXox7C0sKR6b'
 
 Bootstrap5(app)
 
+# initialization a text area from CKEditor
 app.config['CKEDITOR_PKG_TYPE'] = 'basic'
 ckeditor = CKEditor(app)
 
@@ -26,7 +27,6 @@ app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///posts.db'
 db = SQLAlchemy(model_class=Base)
 db.init_app(app)
 
-
 # CONFIGURE TABLE
 class BlogPost(db.Model):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
@@ -37,7 +37,6 @@ class BlogPost(db.Model):
     author: Mapped[str] = mapped_column(String(250), nullable=False)
     img_url: Mapped[str] = mapped_column(String(250), nullable=False)
 
-
 with app.app_context():
     db.create_all()
 
@@ -47,10 +46,8 @@ class BlogForm(FlaskForm):
     subtitle = StringField("Blog Post Subtitle", validators=[DataRequired()])
     author = StringField("Author", validators=[DataRequired()])
     url = StringField("URL", validators=[DataRequired(), URL()])
-    body = CKEditorField('Body')
+    body = CKEditorField('Blog Content')
     submit = SubmitField("Send post")
-
-
 
 @app.route('/', methods=["GET"])
 def get_all_posts():
@@ -62,39 +59,56 @@ def show_post(post_id):
     requested_post = BlogPost.query.filter(BlogPost.id == post_id).one_or_none()
     return render_template("post.html", post=requested_post)
 
-
-# TODO: add_new_post() to create a new blog post
 @app.route('/new-post', methods=['GET', 'POST'])
 def add_new_post():
     form = BlogForm()
     if form.validate_on_submit():
-        title = form.title.data
-        subtitle = form.subtitle.data
-        date = datetime.date.today().strftime("%B %d, %Y")
-        body = form.body.data
-        author = form.author.data
-        img_url = form.url.data
-        new_post = BlogPost(title, subtitle, date, body, author, img_url)
+        new_post = BlogPost()
+        new_post.title = form.title.data
+        new_post.subtitle = form.subtitle.data
+        new_post.date = datetime.date.today().strftime("%B %d, %Y")
+        new_post.body = form.body.data
+        new_post.author = form.author.data
+        new_post.img_url = form.url.data
         db.session.add(new_post)
         db.session.commit()
-        return redirect(url_for("/"))
+        return redirect(url_for('get_all_posts'))
     return render_template("make-post.html", form=form)
 
+@app.route("/edit-post/<int:post_id>", methods=['GET', 'POST'])
+def edit_post(post_id):
+    post_to_edit = BlogPost.query.filter(BlogPost.id == post_id).one_or_none()
+    form = BlogForm(
+        title=post_to_edit.title,
+        subtitle=post_to_edit.subtitle,
+        author=post_to_edit.author,
+        url=post_to_edit.img_url,
+        body=post_to_edit.body
+    )
+    if form.validate_on_submit():
+        post_to_edit.title = form.title.data
+        post_to_edit.subtitle = form.subtitle.data
+        post_to_edit.img_url = form.url.data
+        post_to_edit.author = form.author.data
+        post_to_edit.body = form.body.data
+        db.session.commit()
+        return redirect(url_for('show_post', post_id=post_to_edit.id))
+    return render_template("make-post.html", form=form, post_id=post_id)
 
-# TODO: edit_post() to change an existing blog post
+@app.route("/delete/<int:post_id>", methods=["GET"])
+def delete_post(post_id):
+    post_to_delete = db.get_or_404(BlogPost, post_id)
+    db.session.delete(post_to_delete)
+    db.session.commit()
+    return redirect(url_for('get_all_posts'))
 
-# TODO: delete_post() to remove a blog post from the database
-
-# Below is the code from previous lessons. No changes needed.
 @app.route("/about")
 def about():
     return render_template("about.html")
 
-
 @app.route("/contact")
 def contact():
     return render_template("contact.html")
-
 
 if __name__ == "__main__":
     app.run(debug=True, port=5003)
