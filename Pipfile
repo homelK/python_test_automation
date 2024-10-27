@@ -6,6 +6,7 @@ name = "pypi"
 [packages]
 flask = "*"
 flask_sqlalchemy = "*"
+Flask_Login = "*"
 Bootstrap_Flask = "*"
 Flask_CKEditor = "*"
 WTForms = "*"
