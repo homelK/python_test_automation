@@ -4,13 +4,15 @@ verify_ssl = true
 name = "pypi"
 
 [packages]
-flask = "*"
-flask_sqlalchemy = "*"
-Bootstrap_Flask = "*"
-Flask_CKEditor = "*"
-WTForms = "*"
-Flask_WTF = "*"
-SQLAlchemy = "*"
+Bootstrap_Flask = "==2.2.0"
+Flask_CKEditor = "==0.4.6"
+Flask_Login = "==0.6.3"
+Flask-Gravatar = "==0.5.0"
+Flask_WTF = "==1.2.1"
+WTForms = "==3.0.1"
+Flask = "==2.3.2"
+flask_sqlalchemy = "==3.1.1"
+SQLAlchemy = "==2.0.25"
 
 [dev-packages]
 
