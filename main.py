@@ -4,7 +4,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 from sqlalchemy import Integer, String, Boolean
-from flask_login import UserMixin, login_user, LoginManager, login_required, current_user, logout_user
+from flask_login import UserMixin, login_user, LoginManager, login_required, current_user, logout_user, user_logged_in
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'secret-key-goes-here'
@@ -44,19 +44,23 @@ def load_user(user_id):
 
 @app.route('/')
 def home():
-    return render_template("index.html")
+    return render_template("index.html", logged_in=current_user.is_authenticated)
 
 
 @app.route('/register', methods=["GET", "POST"])
 def register():
     if request.method == "POST":
         data = request.form
-        hashed_password = generate_password_hash(data.get("password"), "pbkdf2:sha256", 8)
-        new_user = User(email=data.get("email"), password=hashed_password, name=data.get("name"))
-        db.session.add(new_user)
-        db.session.commit()
-        load_user(new_user)
-        return redirect(url_for('secrets'))
+        if User.query.filter(User.email == data.get("email")).one_or_none() is not None:
+            flash("You have already registered with that email, log in instead.")
+            return redirect(url_for("login"))
+        else:
+            hashed_password = generate_password_hash(data.get("password"), "pbkdf2:sha256", 8)
+            new_user = User(email=data.get("email"), password=hashed_password, name=data.get("name"))
+            db.session.add(new_user)
+            db.session.commit()
+            login_user(new_user)
+            return redirect(url_for('secrets'))
     return render_template("register.html")
 
 
@@ -66,20 +70,21 @@ def login():
         data = request.form
         user = User.query.filter(User.email == data.get("email")).one_or_none()
         if user is None:
-            flash("There is no user with such email")
+            flash("There is no such email, please try again.")
             return redirect(url_for("login"))
-
         if check_password_hash(user.password, data.get("password")):
             login_user(user)
             return redirect(url_for("secrets"))
-
+        else:
+            flash("Wrong password, try again.")
+            return redirect(url_for("login"))
     return render_template("login.html")
 
 
 @app.route('/secrets')
 @login_required
 def secrets():
-    return render_template("secrets.html", user=current_user)
+    return render_template("secrets.html", user=current_user, logged_in=current_user.is_authenticated)
 
 
 @app.route('/logout')
