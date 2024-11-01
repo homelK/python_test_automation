@@ -3,15 +3,14 @@ from flask import Flask, abort, render_template, redirect, url_for, flash
 from flask_bootstrap import Bootstrap5
 from flask_ckeditor import CKEditor
 from flask_gravatar import Gravatar
-from flask_login import UserMixin, login_user, LoginManager, current_user, logout_user
+from flask_login import UserMixin, login_user, LoginManager, current_user, logout_user, login_required
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy.orm import relationship, DeclarativeBase, Mapped, mapped_column
 from sqlalchemy import Integer, String, Text
 from functools import wraps
 from werkzeug.security import generate_password_hash, check_password_hash
 # Import your forms from the forms.py
-from forms import CreatePostForm
-
+from forms import CreatePostForm, RegisterForm, LoginForm
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = '8BYkEfBA6O6donzWlSihBXox7C0sKR6b'
@@ -20,15 +19,18 @@ Bootstrap5(app)
 
 # Configure Flask-Login
 login_manager = LoginManager()
+login_manager.init_app(app)
+
 
 @login_manager.user_loader
 def load_user(user_id):
-    return BlogPost.query.filter(BlogPost.id == user_id).one_or_none()
+    return User.query.filter(User.id == user_id).one_or_none()
 
 
 # CREATE DATABASE
 class Base(DeclarativeBase):
     pass
+
 
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///posts.db'
 db = SQLAlchemy(model_class=Base)
@@ -48,31 +50,60 @@ class BlogPost(db.Model):
 
 
 # Create a User table for all your registered users.
-class User(db.Model):
-    __tablename__ = "user"
+class User(db.Model, UserMixin):
+    __tablename__ = "users"
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     email: Mapped[str] = mapped_column(String(20), unique=True, nullable=False)
     password: Mapped[str] = mapped_column(String(20), nullable=False)
     name: Mapped[str] = mapped_column(String(20), nullable=False)
 
+
 with app.app_context():
-    db.create_all(db.Model)
+    db.create_all()
 
 
-# TODO: Use Werkzeug to hash the user's password when creating a new user.
-@app.route('/register')
+@app.route('/register', methods=["GET", "POST"])
 def register():
-    return render_template("register.html")
+    form = RegisterForm(csrf_token=app.config['SECRET_KEY'])
+    if form.validate_on_submit():
+        user = User.query.filter(User.email == form.email.data).one_or_none()
+        if user is not None:
+            flash("You've already signed up with that email, log in instead.")
+            return redirect(url_for('login'))
+        password_hashed = generate_password_hash(form.password.data, "pbkdf2", 8)
+        new_user = User(
+            email=form.email.data,
+            password=password_hashed,
+            name=form.name.data
+        )
+        db.session.add(new_user)
+        db.session.commit()
+        login_user(new_user)
+        return redirect(url_for('get_all_posts'))
+    return render_template("register.html", form=form)
 
 
-# TODO: Retrieve a user from the database based on their email. 
-@app.route('/login')
+@app.route('/login', methods=["GET", "POST"])
 def login():
-    return render_template("login.html")
+    form = LoginForm(csrf_token=app.config['SECRET_KEY'])
+    if form.validate_on_submit():
+        user = User.query.filter(User.email == form.email.data).one_or_none()
+        if user is None:
+            flash("The email doesn't exist.")
+            return redirect(url_for('login'))
+        if check_password_hash(user.password, form.password.data):
+            login_user(user)
+            return redirect(url_for('get_all_posts'))
+        else:
+            flash("Wrong password.")
+            return redirect(url_for('login'))
+    return render_template("login.html", form=form)
 
 
 @app.route('/logout')
+@login_required
 def logout():
+    logout_user()
     return redirect(url_for('get_all_posts'))
 
 
@@ -80,6 +111,7 @@ def logout():
 def get_all_posts():
     result = db.session.execute(db.select(BlogPost))
     posts = result.scalars().all()
+    print(current_user.is_authenticated)
     return render_template("index.html", all_posts=posts)
 
 
@@ -90,8 +122,19 @@ def show_post(post_id):
     return render_template("post.html", post=requested_post)
 
 
-# TODO: Use a decorator so only an admin user can create a new post
+def admin_only(function):
+    @wraps(function)
+    def decorated_function(*args, **kwargs):
+        if current_user.id == 1:
+            return function(*args, **kwargs)
+        else:
+            abort(403)
+
+    return decorated_function
+
+# Use a decorator so only an admin user can create a new post
 @app.route("/new-post", methods=["GET", "POST"])
+@admin_only
 def add_new_post():
     form = CreatePostForm()
     if form.validate_on_submit():
@@ -109,8 +152,9 @@ def add_new_post():
     return render_template("make-post.html", form=form)
 
 
-# TODO: Use a decorator so only an admin user can edit a post
+# Use a decorator so only an admin user can edit a post
 @app.route("/edit-post/<int:post_id>", methods=["GET", "POST"])
+@admin_only
 def edit_post(post_id):
     post = db.get_or_404(BlogPost, post_id)
     edit_form = CreatePostForm(
@@ -131,8 +175,9 @@ def edit_post(post_id):
     return render_template("make-post.html", form=edit_form, is_edit=True)
 
 
-# TODO: Use a decorator so only an admin user can delete a post
+# Use a decorator so only an admin user can delete a post
 @app.route("/delete/<int:post_id>")
+@admin_only
 def delete_post(post_id):
     post_to_delete = db.get_or_404(BlogPost, post_id)
     db.session.delete(post_to_delete)
