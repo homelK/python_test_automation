@@ -1,4 +1,5 @@
 from datetime import date
+from typing import List
 from flask import Flask, abort, render_template, redirect, url_for, flash
 from flask_bootstrap import Bootstrap5
 from flask_ckeditor import CKEditor
@@ -6,36 +7,43 @@ from flask_gravatar import Gravatar
 from flask_login import UserMixin, login_user, LoginManager, current_user, logout_user, login_required
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy.orm import relationship, DeclarativeBase, Mapped, mapped_column
-from sqlalchemy import Integer, String, Text
+from sqlalchemy import Integer, String, Text, ForeignKey
 from functools import wraps
 from werkzeug.security import generate_password_hash, check_password_hash
 # Import your forms from the forms.py
-from forms import CreatePostForm, RegisterForm, LoginForm
+from forms import CreatePostForm, RegisterForm, LoginForm, CommentForm
+
+
+def admin_only(function):
+    @wraps(function)
+    def decorated_function(*args, **kwargs):
+        if current_user.id != 1:
+            return abort(403)
+        else:
+            return function(*args, **kwargs)
+    return decorated_function
+
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = '8BYkEfBA6O6donzWlSihBXox7C0sKR6b'
 ckeditor = CKEditor(app)
 Bootstrap5(app)
 
-# Configure Flask-Login
-login_manager = LoginManager()
-login_manager.init_app(app)
-
-
-@login_manager.user_loader
-def load_user(user_id):
-    return User.query.filter(User.id == user_id).one_or_none()
-
-
 # CREATE DATABASE
 class Base(DeclarativeBase):
     pass
-
 
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///posts.db'
 db = SQLAlchemy(model_class=Base)
 db.init_app(app)
 
+# Configure Flask-Login
+login_manager = LoginManager()
+login_manager.init_app(app)
+
+@login_manager.user_loader
+def load_user(user_id):
+    return User.query.filter(User.id == user_id).one_or_none()
 
 # CONFIGURE TABLES
 class BlogPost(db.Model):
@@ -45,7 +53,8 @@ class BlogPost(db.Model):
     subtitle: Mapped[str] = mapped_column(String(250), nullable=False)
     date: Mapped[str] = mapped_column(String(250), nullable=False)
     body: Mapped[str] = mapped_column(Text, nullable=False)
-    author: Mapped[str] = mapped_column(String(250), nullable=False)
+    author = relationship("User", back_populates="posts")
+    author_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"))
     img_url: Mapped[str] = mapped_column(String(250), nullable=False)
 
 
@@ -56,6 +65,7 @@ class User(db.Model, UserMixin):
     email: Mapped[str] = mapped_column(String(20), unique=True, nullable=False)
     password: Mapped[str] = mapped_column(String(20), nullable=False)
     name: Mapped[str] = mapped_column(String(20), nullable=False)
+    posts = relationship("BlogPost", back_populates="author")
 
 
 with app.app_context():
@@ -106,7 +116,6 @@ def logout():
     logout_user()
     return redirect(url_for('get_all_posts'))
 
-
 @app.route('/')
 def get_all_posts():
     result = db.session.execute(db.select(BlogPost))
@@ -118,19 +127,10 @@ def get_all_posts():
 # TODO: Allow logged-in users to comment on posts
 @app.route("/post/<int:post_id>")
 def show_post(post_id):
+    form = CommentForm(csrf_token=app.config['SECRET_KEY'])
     requested_post = db.get_or_404(BlogPost, post_id)
-    return render_template("post.html", post=requested_post)
+    return render_template("post.html", post=requested_post, form=form)
 
-
-def admin_only(function):
-    @wraps(function)
-    def decorated_function(*args, **kwargs):
-        if current_user.id == 1:
-            return function(*args, **kwargs)
-        else:
-            abort(403)
-
-    return decorated_function
 
 # Use a decorator so only an admin user can create a new post
 @app.route("/new-post", methods=["GET", "POST"])
