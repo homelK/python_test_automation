@@ -80,7 +80,6 @@ class Comment(db.Model):
     post = relationship("BlogPost", back_populates="comments")
 
 
-
 with app.app_context():
     db.create_all()
 
@@ -138,10 +137,17 @@ def get_all_posts():
 
 
 # TODO: Allow logged-in users to comment on posts
-@app.route("/post/<int:post_id>")
+@app.route("/post/<int:post_id>", methods=["GET", "POST"])
 def show_post(post_id):
     form = CommentForm(csrf_token=app.config['SECRET_KEY'])
     requested_post = db.get_or_404(BlogPost, post_id)
+    if form.validate_on_submit():
+        if not current_user.is_authenticated:
+            flash("You are not registered yet, please log in.")
+            return redirect(url_for('login'))
+        new_comment = Comment(text=form.body.data, comment_author=current_user, post=requested_post)
+        db.session.add(new_comment)
+        db.session.commit()
     return render_template("post.html", post=requested_post, form=form)
 
 
